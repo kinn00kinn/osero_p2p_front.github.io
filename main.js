@@ -1,18 +1,18 @@
 // ============== PeerJSの接続設定 ==============
 // ここにRender等でデプロイしたシグナリングサーバーの情報を入力します
 // 例：
-// const peer = new Peer({
-//   host: 'your-peerjs-server.onrender.com',
-//   secure: true,
-//   key: 'peerjs',
-// });
+const peer = new Peer({
+  host: "https://osero-p2p-render.onrender.com",
+  secure: true,
+  key: "peerjs",
+});
 
 // ローカルテスト用 (サーバーをローカルで動かす場合)
-const peer = new Peer({
-  host: "https://osero-p2p-render.onrender.com/",
-  port: 10000,
-  path: "/myapp",
-});
+// const peer = new Peer({
+//   host: "https://osero-p2p-render.onrender.com/",
+//   port: 10000,
+//   path: "/myapp",
+// });
 
 // ============== DOM要素の取得 ==============
 const myIdDisplay = document.getElementById("my-id");
