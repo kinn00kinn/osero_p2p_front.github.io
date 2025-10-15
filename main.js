@@ -10,9 +10,14 @@ const MESSAGE_TYPES = {
   RESET: "reset",
 };
 const DIRECTIONS = [
-  [-1, -1], [-1, 0], [-1, 1],
-  [0, -1],           [0, 1],
-  [1, -1], [1, 0], [1, 1],
+  [-1, -1],
+  [-1, 0],
+  [-1, 1],
+  [0, -1],
+  [0, 1],
+  [1, -1],
+  [1, 0],
+  [1, 1],
 ];
 
 // ============== DOM要素の取得 ==============
@@ -35,7 +40,7 @@ const gameState = {
   gameStarted: false,
 };
 
-let connection = null; // 相手との接続オブジェクト
+let connection = null;
 
 // ============== PeerJSの接続設定 ==============
 const peer = new Peer({
@@ -48,9 +53,6 @@ const peer = new Peer({
 // 初期化処理
 // ========================================================
 
-/**
- * ページ読み込み時の初期化
- */
 function initialize() {
   initializePeerEvents();
   initializeEventListeners();
@@ -58,12 +60,9 @@ function initialize() {
   checkUrlParams();
 }
 
-/**
- * ページのURLパラメータをチェックして招待IDを自動入力
- */
 function checkUrlParams() {
   const params = new URLSearchParams(window.location.search);
-  const connectToId = params.get('connect_to');
+  const connectToId = params.get("connect_to");
   if (connectToId) {
     domElements.opponentIdInput.value = connectToId;
     domElements.statusDisplay.textContent = `招待されています！ '接続' ボタンを押してください。`;
@@ -74,18 +73,16 @@ function checkUrlParams() {
 // P2P通信関連
 // ========================================================
 
-/**
- * PeerJS関連のイベントハンドラを設定
- */
 function initializePeerEvents() {
   peer.on("open", (id) => {
     domElements.myIdDisplay.textContent = id;
     updateUI("disconnected");
   });
 
+  // incoming connection: 先に自分の色を決めてから接続セットアップ
   peer.on("connection", (conn) => {
+    gameState.myColor = COLORS.BLACK; // 受信側は黒を割り当て
     setupConnection(conn);
-    gameState.myColor = COLORS.BLACK; // ホスト側が黒（先手）
   });
 
   peer.on("error", (err) => {
@@ -94,13 +91,16 @@ function initializePeerEvents() {
   });
 }
 
-/**
- * 接続を確立し、イベントハンドラを設定する（共通処理）
- * @param {DataConnection} conn - PeerJSのコネクションオブジェクト
- */
 function setupConnection(conn) {
   connection = conn;
   connection.on("open", () => {
+    // safety: ここで myColor が設定されていることを期待するが念のためチェック
+    if (!gameState.myColor) {
+      console.warn(
+        "myColor is not set when connection opened — defaulting to WHITE."
+      );
+      gameState.myColor = COLORS.WHITE;
+    }
     startGame();
     updateUI("connected");
   });
@@ -111,38 +111,30 @@ function setupConnection(conn) {
   });
 }
 
-/**
- * 受信したデータを処理する
- * @param {object} data - 受信したデータ {type, data}
- */
 function handleReceivedData(data) {
   switch (data.type) {
-    case MESSAGE_TYPES.MOVE:
+    case MESSAGE_TYPES.MOVE: {
       const { x, y, color } = data.data;
+      // 相手の手を反映（isMyMove = false）
       placeStone(x, y, color, false);
       break;
+    }
     case MESSAGE_TYPES.RESET:
-      // ★修正点: 相手からのリセット要求でもstartGameを実行
       startGame();
-      domElements.statusDisplay.textContent = "相手がゲームをリセットしました。";
+      domElements.statusDisplay.textContent =
+        "相手がゲームをリセットしました。";
       break;
+    default:
+      console.warn("Unknown message type:", data.type);
   }
 }
 
-/**
- * データを相手に送信する
- * @param {string} type - メッセージのタイプ
- * @param {object} data - 送信するデータ
- */
 function sendData(type, data) {
   if (connection && connection.open) {
     connection.send({ type, data });
   }
 }
 
-/**
- * 全ての状態をアプリの初期起動時に戻す
- */
 function resetToInitialState() {
   connection = null;
   gameState.myColor = null;
@@ -155,20 +147,16 @@ function resetToInitialState() {
 // ゲームロジック
 // ========================================================
 
-/**
- * ゲームを開始する
- */
 function startGame() {
   initBoard();
   gameState.gameStarted = true;
   domElements.statusDisplay.textContent = "ゲーム開始！";
 }
 
-/**
- * 盤面とゲームの状態を初期化する
- */
 function initBoard() {
-  gameState.board = Array(BOARD_SIZE).fill(0).map(() => Array(BOARD_SIZE).fill(COLORS.EMPTY));
+  gameState.board = Array(BOARD_SIZE)
+    .fill(0)
+    .map(() => Array(BOARD_SIZE).fill(COLORS.EMPTY));
   gameState.board[3][3] = COLORS.WHITE;
   gameState.board[3][4] = COLORS.BLACK;
   gameState.board[4][3] = COLORS.BLACK;
@@ -178,97 +166,65 @@ function initBoard() {
   updateTurnDisplay();
 }
 
-/**
- * 石を置く処理
- * @param {number} x - X座標
- * @param {number} y - Y座標
- * @param {number} color - 石の色
- * @param {boolean} isMyMove - 自分の手番かどうか
- */
 function placeStone(x, y, color, isMyMove) {
   if (gameState.board[y][x] !== COLORS.EMPTY) return;
 
+  const stonesToFlip = getFlippableStones(x, y, color);
+  if (stonesToFlip.length === 0 && isMyMove) return;
+
+  // 盤面を更新
   gameState.board[y][x] = color;
-  flipStones(x, y, color);
-  drawBoard();
+  stonesToFlip.forEach(([fx, fy]) => {
+    gameState.board[fy][fx] = color;
+  });
 
-  gameState.currentTurn = (color === COLORS.BLACK) ? COLORS.WHITE : COLORS.BLACK;
-  updateTurnDisplay();
+  // ターンを切り替え（先に切り替えてから描画することで、相手の有効手が正しく表示される）
+  gameState.currentTurn = color === COLORS.BLACK ? COLORS.WHITE : COLORS.BLACK;
 
+  // 自分の手なら相手に伝える
   if (isMyMove) {
     sendData(MESSAGE_TYPES.MOVE, { x, y, color });
   }
 
+  // 描画（placed/flipped 情報を渡す）
+  drawBoard({ placed: { x, y }, flipped: stonesToFlip });
+  updateTurnDisplay();
+
   checkGameEnd();
 }
 
-/**
- * 石を置けるか判定する
- * @param {number} x
- * @param {number} y
- * @param {number} color
- * @returns {boolean}
- */
 function isValidMove(x, y, color) {
   if (gameState.board[y][x] !== COLORS.EMPTY) return false;
+  return getFlippableStones(x, y, color).length > 0;
+}
 
-  const opponentColor = (color === COLORS.BLACK) ? COLORS.WHITE : COLORS.BLACK;
+function getFlippableStones(x, y, color) {
+  const opponentColor = color === COLORS.BLACK ? COLORS.WHITE : COLORS.BLACK;
+  let allFlippableStones = [];
 
   for (const [dx, dy] of DIRECTIONS) {
+    let line = [];
     let nx = x + dx;
     let ny = y + dy;
-    let hasOpponentStoneBetween = false;
 
     while (nx >= 0 && nx < BOARD_SIZE && ny >= 0 && ny < BOARD_SIZE) {
       if (gameState.board[ny][nx] === opponentColor) {
-        hasOpponentStoneBetween = true;
+        line.push([nx, ny]);
       } else if (gameState.board[ny][nx] === color) {
-        if (hasOpponentStoneBetween) return true;
+        // 自分の石で挟めたら line をひっくるめて確定
+        allFlippableStones = allFlippableStones.concat(line);
         break;
-      } else { // EMPTY
+      } else {
+        // 空白 or その他 -> この方向は不可
         break;
       }
       nx += dx;
       ny += dy;
     }
   }
-  return false;
+  return allFlippableStones;
 }
 
-/**
- * 石をひっくり返す
- * @param {number} x
- * @param {number} y
- * @param {number} color
- */
-function flipStones(x, y, color) {
-  const opponentColor = (color === COLORS.BLACK) ? COLORS.WHITE : COLORS.BLACK;
-
-  for (const [dx, dy] of DIRECTIONS) {
-    const stonesToFlip = [];
-    let nx = x + dx;
-    let ny = y + dy;
-
-    while (nx >= 0 && nx < BOARD_SIZE && ny >= 0 && ny < BOARD_SIZE) {
-      if (gameState.board[ny][nx] === COLORS.EMPTY) break;
-      if (gameState.board[ny][nx] === color) {
-        stonesToFlip.forEach(([fx, fy]) => {
-          gameState.board[fy][fx] = color;
-        });
-        break;
-      }
-      stonesToFlip.push([nx, ny]);
-      nx += dx;
-      ny += dy;
-    }
-  }
-}
-
-/**
- * 特定の色のプレイヤーが動けるかチェック
- * @param {number} color
- * @returns {boolean}
- */
 function canPlayerMove(color) {
   for (let y = 0; y < BOARD_SIZE; y++) {
     for (let x = 0; x < BOARD_SIZE; x++) {
@@ -280,9 +236,6 @@ function canPlayerMove(color) {
   return false;
 }
 
-/**
- * ゲーム終了をチェックする
- */
 function checkGameEnd() {
   const canBlackMove = canPlayerMove(COLORS.BLACK);
   const canWhiteMove = canPlayerMove(COLORS.WHITE);
@@ -291,25 +244,31 @@ function checkGameEnd() {
     endGame();
     return;
   }
-  
-  const currentPlayerCanMove = (gameState.currentTurn === COLORS.BLACK) ? canBlackMove : canWhiteMove;
+
+  const currentPlayerCanMove =
+    gameState.currentTurn === COLORS.BLACK ? canBlackMove : canWhiteMove;
 
   if (!currentPlayerCanMove) {
-    domElements.statusDisplay.textContent = `${gameState.currentTurn === COLORS.BLACK ? '黒' : '白'}は置ける場所がありません。パスします。`;
-    gameState.currentTurn = (gameState.currentTurn === COLORS.BLACK) ? COLORS.WHITE : COLORS.BLACK;
+    domElements.statusDisplay.textContent = `${
+      gameState.currentTurn === COLORS.BLACK ? "黒" : "白"
+    }は置ける場所がありません。パスします。`;
+    gameState.currentTurn =
+      gameState.currentTurn === COLORS.BLACK ? COLORS.WHITE : COLORS.BLACK;
     updateTurnDisplay();
+    // パス後は盤表示更新（有効手が変わるため）
+    drawBoard();
   }
 }
 
-/**
- * ゲームを終了し、結果を表示する
- */
 function endGame() {
-  const counts = gameState.board.flat().reduce((acc, color) => {
-    if (color === COLORS.BLACK) acc.black++;
-    else if (color === COLORS.WHITE) acc.white++;
-    return acc;
-  }, { black: 0, white: 0 });
+  const counts = gameState.board.flat().reduce(
+    (acc, color) => {
+      if (color === COLORS.BLACK) acc.black++;
+      else if (color === COLORS.WHITE) acc.white++;
+      return acc;
+    },
+    { black: 0, white: 0 }
+  );
 
   let resultMessage = `ゲーム終了！ 黒: ${counts.black}, 白: ${counts.white}。`;
   if (counts.black > counts.white) resultMessage += "黒の勝ち！";
@@ -324,40 +283,53 @@ function endGame() {
 // UI関連
 // ========================================================
 
-/**
- * ゲームの状態に応じてUI要素（ボタンなど）の表示を更新する
- * @param {'disconnected' | 'connected'} state
- */
 function updateUI(state) {
-  if (state === "disconnected") {
-    domElements.opponentIdInput.disabled = false;
-    domElements.connectBtn.disabled = false;
-    domElements.shareBtn.style.display = 'inline-block';
-    domElements.resetBtn.style.display = 'none'; // 未接続時はリセット不要
-  } else if (state === "connected") {
-    domElements.opponentIdInput.disabled = true;
-    domElements.connectBtn.disabled = true;
-    domElements.shareBtn.style.display = 'none';
-    domElements.resetBtn.style.display = 'inline-block';
-  }
+  const isConnected = state === "connected";
+  domElements.opponentIdInput.disabled = isConnected;
+  domElements.connectBtn.disabled = isConnected;
+  domElements.shareBtn.style.display = isConnected ? "none" : "inline-block";
+  domElements.resetBtn.style.display = isConnected ? "inline-block" : "none";
 }
 
-/**
- * 盤面を描画する
- */
-function drawBoard() {
+function drawBoard(animations = {}) {
   domElements.board.innerHTML = "";
+  const validMoves =
+    gameState.currentTurn === gameState.myColor
+      ? getValidMoves(gameState.myColor)
+      : [];
+
   for (let y = 0; y < BOARD_SIZE; y++) {
     const tr = document.createElement("tr");
     for (let x = 0; x < BOARD_SIZE; x++) {
       const td = document.createElement("td");
       td.dataset.x = x;
       td.dataset.y = y;
+
       const color = gameState.board[y][x];
       if (color !== COLORS.EMPTY) {
         const stone = document.createElement("div");
-        stone.className = "stone " + (color === COLORS.BLACK ? "black" : "white");
+        stone.className =
+          "stone " + (color === COLORS.BLACK ? "black" : "white");
+
+        // アニメーションクラスの追加
+        if (
+          animations.placed &&
+          animations.placed.x === x &&
+          animations.placed.y === y
+        ) {
+          stone.classList.add("placed");
+        } else if (
+          animations.flipped &&
+          animations.flipped.some(([fx, fy]) => fx === x && fy === y)
+        ) {
+          stone.classList.add("flipping");
+        }
+
         td.appendChild(stone);
+      } else {
+        if (validMoves.some((move) => move.x === x && move.y === y)) {
+          td.classList.add("valid-move");
+        }
       }
       tr.appendChild(td);
     }
@@ -365,9 +337,18 @@ function drawBoard() {
   }
 }
 
-/**
- * 手番表示を更新する
- */
+function getValidMoves(color) {
+  const moves = [];
+  for (let y = 0; y < BOARD_SIZE; y++) {
+    for (let x = 0; x < BOARD_SIZE; x++) {
+      if (isValidMove(x, y, color)) {
+        moves.push({ x, y });
+      }
+    }
+  }
+  return moves;
+}
+
 function updateTurnDisplay() {
   if (!connection || !gameState.myColor) {
     domElements.turnDisplay.textContent = "接続待機中...";
@@ -390,55 +371,45 @@ function updateTurnDisplay() {
 // イベントリスナー設定
 // ========================================================
 
-/**
- * DOM要素のイベントリスナーをまとめて設定
- */
 function initializeEventListeners() {
-  // 接続ボタン
   domElements.connectBtn.addEventListener("click", () => {
     const opponentId = domElements.opponentIdInput.value;
-    if (!opponentId) {
-      alert("相手のIDを入力してください。");
-      return;
-    }
+    if (!opponentId) return alert("相手のIDを入力してください。");
+
+    // 発信側は白を割り当ててから接続
+    gameState.myColor = COLORS.WHITE;
     const conn = peer.connect(opponentId);
     setupConnection(conn);
-    gameState.myColor = COLORS.WHITE; // クライアント側が白（後手）
   });
 
-  // 招待リンク共有ボタン
-  domElements.shareBtn.addEventListener('click', () => {
+  domElements.shareBtn.addEventListener("click", () => {
     const myId = domElements.myIdDisplay.textContent;
     if (!myId) return;
-    const baseUrl = window.location.href.split('?')[0];
-    const shareUrl = `${baseUrl}?connect_to=${myId}`;
+    const shareUrl = `${window.location.href.split("?")[0]}?connect_to=${myId}`;
     navigator.clipboard.writeText(shareUrl).then(() => {
-      domElements.statusDisplay.textContent = '招待リンクをコピーしました！';
-    }).catch(err => {
-      console.error('Failed to copy: ', err);
-      domElements.statusDisplay.textContent = 'リンクのコピーに失敗しました。';
+      domElements.statusDisplay.textContent = "招待リンクをコピーしました！";
     });
   });
 
-  // 盤面クリック
   domElements.board.addEventListener("click", (e) => {
-    if (!gameState.gameStarted || gameState.currentTurn !== gameState.myColor) return;
+    // デバッグ（必要なければ削除）
+    // console.log('board click target:', e.target);
+
+    if (!gameState.gameStarted || gameState.currentTurn !== gameState.myColor)
+      return;
 
     const td = e.target.closest("td");
-    if (!td) return;
+    if (!td || !td.classList.contains("valid-move")) return;
 
-    const x = parseInt(td.dataset.x);
-    const y = parseInt(td.dataset.y);
+    const x = parseInt(td.dataset.x, 10);
+    const y = parseInt(td.dataset.y, 10);
+    if (Number.isNaN(x) || Number.isNaN(y)) return;
 
-    if (isValidMove(x, y, gameState.myColor)) {
-      placeStone(x, y, gameState.myColor, true);
-    }
+    placeStone(x, y, gameState.myColor, true);
   });
-  
-  // リセットボタン
+
   domElements.resetBtn.addEventListener("click", () => {
     if (!connection) return;
-    // ★修正点: 相手にリセットを通知し、自分もゲームを開始する
     sendData(MESSAGE_TYPES.RESET, {});
     startGame();
     domElements.statusDisplay.textContent = "ゲームをリセットしました。";

@@ -3,32 +3,51 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="description" content="A simple peer-to-peer (P2P) Othello game that you can play with your friends in your browser.">
+    
     <title>P2P Othello</title>
+    
+    <!-- 🚀 Google Fontsをパフォーマンスの良い方法で読み込み -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Nunito:wght@400;700&display=swap" rel="stylesheet">
+
     <link rel="stylesheet" href="./style.css">
+    
+    <!-- 🚀 scriptタグはhead内に移動し、defer属性を追加 -->
+    <script src="https://unpkg.com/peerjs@1.5.2/dist/peerjs.min.js" defer></script>
+    <script src="./main.js" defer></script>
 </head>
 <body>
-    <h1>P2P Othello</h1>
 
-    <div class="connection-area">
-        <div>
-            <p>Your ID:</p>
-            <strong id="my-id">...connecting</strong>
-            <button id="share-btn" style="display: none;">🔗 Share Link</button>
-        </div>
-        <div>
-            <input type="text" id="opponent-id-input" placeholder="Opponent's ID">
-            <button id="connect-btn">Connect</button>
-        </div>
-    </div>
+    <header>
+        <h1>P2P Othello</h1>
+    </header>
 
-    <div id="status-display">Welcome! Get your ID and share it with a friend.</div>
-    <div id="turn-display"></div>
+    <main>
+        <section class="connection-area" aria-labelledby="connection-heading">
+            <h2 id="connection-heading" class="visually-hidden">Connection</h2>
+            <div>
+                <p>Your ID: <strong id="my-id">...connecting</strong></p>
+                <button id="share-btn" style="display: none;">🔗 Share Link</button>
+            </div>
+            <div>
+                <label for="opponent-id-input" class="visually-hidden">Opponent's ID</label>
+                <input type="text" id="opponent-id-input" placeholder="Opponent's ID">
+                <button id="connect-btn">Connect</button>
+            </div>
+        </section>
 
-    <table id="board"></table>
+        <section class="game-area" aria-labelledby="game-heading">
+             <h2 id="game-heading" class="visually-hidden">Game Area</h2>
+            <div id="status-display" aria-live="polite">Welcome! Get your ID and share it with a friend.</div>
+            <div id="turn-display" aria-live="polite"></div>
+    
+            <table id="board"></table>
+    
+            <button id="reset-btn">Reset Game</button>
+        </section>
+    </main>
 
-    <button id="reset-btn">Reset Game</button>
-
-    <script src="https://unpkg.com/peerjs@1.5.2/dist/peerjs.min.js"></script>
-    <script src="./main.js"></script>
 </body>
 </html>
