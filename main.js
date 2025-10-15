@@ -5,6 +5,7 @@ const peer = new Peer({
   host: "osero-p2p-render.onrender.com",
   secure: true,
   key: "peerjs",
+  path: "/myapp",
 });
 
 // ローカルテスト用 (サーバーをローカルで動かす場合)
