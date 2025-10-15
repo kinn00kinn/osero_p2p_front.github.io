@@ -1,18 +1,10 @@
 // ============== PeerJSの接続設定 ==============
-// ここにRender等でデプロイしたシグナリングサーバーの情報を入力します
-// 例：
 const peer = new Peer({
   host: "osero-p2p-render.onrender.com",
   secure: true,
   path: "/myapp",
 });
 
-// ローカルテスト用 (サーバーをローカルで動かす場合)
-// const peer = new Peer({
-//   host: "https://osero-p2p-render.onrender.com/",
-//   port: 10000,
-//   path: "/myapp",
-// });
 
 // ============== DOM要素の取得 ==============
 const myIdDisplay = document.getElementById("my-id");
@@ -22,6 +14,7 @@ const boardEl = document.getElementById("board");
 const statusDisplay = document.getElementById("status-display");
 const turnDisplay = document.getElementById("turn-display");
 const resetBtn = document.getElementById("reset-btn");
+const shareBtn = document.getElementById("share-btn"); // ★ 追加
 
 // ============== ゲームの状態変数 ==============
 const BOARD_SIZE = 8;
@@ -31,19 +24,47 @@ let currentTurn = 1; // 1: 黒のターン, 2: 白のターン
 let connection = null; // 相手との接続オブジェクト
 let gameStarted = false;
 
+
+// ★★★ ここから追加 ★★★
+// ページ読み込み時にURLパラメータをチェックする
+window.addEventListener('load', () => {
+    const params = new URLSearchParams(window.location.search);
+    const connectToId = params.get('connect_to');
+    if (connectToId) {
+        opponentIdInput.value = connectToId;
+        statusDisplay.textContent = `Invitation received! Click 'Connect' to start.`;
+    }
+});
+// ★★★ ここまで追加 ★★★
+
+
 // ============== P2P通信関連の処理 ==============
 
 // PeerJSサーバーへの接続が確立したとき
 peer.on("open", (id) => {
   myIdDisplay.textContent = id;
+  shareBtn.style.display = 'inline-block'; // ★ ID取得後にシェアボタンを表示
+
+  // ★★★ ここから追加 ★★★
+  // シェアボタンのクリックイベント
+  shareBtn.addEventListener('click', () => {
+      const baseUrl = window.location.href.split('?')[0];
+      const shareUrl = `${baseUrl}?connect_to=${id}`;
+
+      navigator.clipboard.writeText(shareUrl).then(() => {
+          statusDisplay.textContent = 'Invitation link copied!';
+      }).catch(err => {
+          console.error('Failed to copy: ', err);
+          statusDisplay.textContent = 'Could not copy link.';
+      });
+  });
+  // ★★★ ここまで追加 ★★★
 });
 
 // 相手からの接続を待つ処理
 peer.on("connection", (conn) => {
   setupConnection(conn);
-  // 自分がホスト側なので、黒(先手)になる
-  myColor = 1;
-  startGame();
+  myColor = 1; // 自分がホスト側なので、黒(先手)になる
 });
 
 // 相手に接続するボタンの処理
@@ -55,8 +76,7 @@ connectBtn.addEventListener("click", () => {
   }
   const conn = peer.connect(opponentId);
   setupConnection(conn);
-  // 自分がクライアント側なので、白(後手)になる
-  myColor = 2;
+  myColor = 2; // 自分がクライアント側なので、白(後手)になる
 });
 
 // 接続のセットアップ（共通処理）
@@ -66,10 +86,8 @@ function setupConnection(conn) {
     statusDisplay.textContent = `Connected to ${connection.peer}.`;
     opponentIdInput.disabled = true;
     connectBtn.disabled = true;
-    // if (myColor === 1) {
-    // ホスト側だけがゲーム開始をトリガー
+    shareBtn.disabled = true; // ★ 接続後はシェアボタンも無効化
     startGame();
-    // }
   });
 
   connection.on("data", (data) => {
@@ -81,9 +99,13 @@ function setupConnection(conn) {
     gameStarted = false;
     opponentIdInput.disabled = false;
     connectBtn.disabled = false;
+    shareBtn.disabled = false; // ★ 切断されたら再度有効化
+    myColor = null;
   });
 }
 
+// （以降のゲームロジックは変更ありません）
+// ... (昨日完成したコードのまま) ...
 // データ受信時の処理
 function handleReceivedData(data) {
   if (data.type === "move") {
@@ -116,17 +138,17 @@ function initGame() {
   board[4][4] = 2; // 白
 
   currentTurn = 1; // 黒のターンから
-  gameStarted = false;
+  gameStarted = false; // startGameが呼ばれるまでfalse
   drawBoard();
   updateTurnDisplay();
 }
 
 // ゲーム開始処理
 function startGame() {
-  if (gameStarted) return;
-  initGame();
+  initGame(); // 盤面をリセット
   gameStarted = true;
   statusDisplay.textContent = "Game started!";
+  updateTurnDisplay(); // 役割表示を更新
 }
 
 // 盤面の描画
@@ -151,8 +173,8 @@ function drawBoard() {
 
 // 手番表示の更新
 function updateTurnDisplay() {
-  if (!gameStarted) {
-    turnDisplay.textContent = "";
+  if (!gameStarted || !myColor) {
+    turnDisplay.textContent = "Waiting for connection...";
     return;
   }
   const turnColor = currentTurn === 1 ? "Black" : "White";
@@ -202,67 +224,50 @@ function isValidMove(x, y, color) {
   if (board[y][x] !== 0) return false;
 
   const opponentColor = color === 1 ? 2 : 1;
-  // 8方向をチェック
   const directions = [
-    [-1, -1],
-    [-1, 0],
-    [-1, 1],
-    [0, -1],
-    [0, 1],
-    [1, -1],
-    [1, 0],
-    [1, 1],
+    [-1, -1], [-1, 0], [-1, 1],
+    [0, -1], [0, 1],
+    [1, -1], [1, 0], [1, 1],
   ];
 
+  let canFlipSomething = false;
   for (const [dx, dy] of directions) {
-    let stonesToFlip = [];
     let nx = x + dx;
     let ny = y + dy;
 
-    // 隣が相手の石かチェック
     if (
-      nx >= 0 &&
-      nx < BOARD_SIZE &&
-      ny >= 0 &&
-      ny < BOARD_SIZE &&
+      nx >= 0 && nx < BOARD_SIZE &&
+      ny >= 0 && ny < BOARD_SIZE &&
       board[ny][nx] === opponentColor
     ) {
-      stonesToFlip.push([nx, ny]);
-      // その方向に自分の石があるまで進む
       while (true) {
         nx += dx;
         ny += dy;
         if (
-          nx < 0 ||
-          nx >= BOARD_SIZE ||
-          ny < 0 ||
-          ny >= BOARD_SIZE ||
+          nx < 0 || nx >= BOARD_SIZE ||
+          ny < 0 || ny >= BOARD_SIZE ||
           board[ny][nx] === 0
         ) {
-          break; // 盤外か空マスなら失敗
+          break;
         }
         if (board[ny][nx] === color) {
-          return true; // 自分の石を見つけたら成功
+          canFlipSomething = true;
+          break;
         }
-        stonesToFlip.push([nx, ny]);
       }
     }
+    if (canFlipSomething) break;
   }
-  return false;
+  return canFlipSomething;
 }
 
 // 石をひっくり返す処理
 function flipStones(x, y, color) {
   const opponentColor = color === 1 ? 2 : 1;
   const directions = [
-    [-1, -1],
-    [-1, 0],
-    [-1, 1],
-    [0, -1],
-    [0, 1],
-    [1, -1],
-    [1, 0],
-    [1, 1],
+    [-1, -1], [-1, 0], [-1, 1],
+    [0, -1], [0, 1],
+    [1, -1], [1, 0], [1, 1],
   ];
 
   for (const [dx, dy] of directions) {
@@ -273,7 +278,6 @@ function flipStones(x, y, color) {
     while (nx >= 0 && nx < BOARD_SIZE && ny >= 0 && ny < BOARD_SIZE) {
       if (board[ny][nx] === 0) break;
       if (board[ny][nx] === color) {
-        // 自分の石を見つけたら、間の石をすべてひっくり返す
         for (const [fx, fy] of stonesToFlip) {
           board[fy][fx] = color;
         }
@@ -288,20 +292,16 @@ function flipStones(x, y, color) {
 
 // ゲーム終了のチェック
 function checkGameEnd() {
-  // プレイヤーが石を置ける場所があるかチェック
   const canBlackMove = canPlayerMove(1);
   const canWhiteMove = canPlayerMove(2);
 
   if (!canBlackMove && !canWhiteMove) {
-    // どちらも置けないならゲーム終了
     endGame();
   } else if (currentTurn === 1 && !canBlackMove) {
-    // 黒のターンだが置けない -> パスして白のターンへ
     currentTurn = 2;
     updateTurnDisplay();
     statusDisplay.textContent = "Black has no moves, passes turn.";
   } else if (currentTurn === 2 && !canWhiteMove) {
-    // 白のターンだが置けない -> パスして黒のターンへ
     currentTurn = 1;
     updateTurnDisplay();
     statusDisplay.textContent = "White has no moves, passes turn.";
@@ -342,8 +342,8 @@ function endGame() {
 
 // リセットボタンの処理
 resetBtn.addEventListener("click", () => {
-  initGame();
   sendData("reset", {});
+  startGame(); // 自分も相手もリセット
   statusDisplay.textContent = "Game has been reset.";
 });
 
