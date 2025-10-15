@@ -1,0 +1,33 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>P2P Othello</title>
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+    <h1>P2P Othello</h1>
+
+    <div class="connection-area">
+        <div>
+            <p>Your ID:</p>
+            <strong id="my-id">...connecting</strong>
+        </div>
+        <div>
+            <input type="text" id="opponent-id-input" placeholder="Opponent's ID">
+            <button id="connect-btn">Connect</button>
+        </div>
+    </div>
+
+    <div id="status-display">Welcome! Get your ID and share it with a friend.</div>
+    <div id="turn-display"></div>
+
+    <table id="board"></table>
+
+    <button id="reset-btn">Reset Game</button>
+
+    <script src="https://unpkg.com/peerjs@1.5.2/dist/peerjs.min.js"></script>
+    <script src="main.js"></script>
+</body>
+</html>
