@@ -10,7 +10,7 @@
 // ローカルテスト用 (サーバーをローカルで動かす場合)
 const peer = new Peer({
   host: "https://osero-p2p-render.onrender.com/",
-  port: 9000,
+  port: 10000,
   path: "/myapp",
 });
 
