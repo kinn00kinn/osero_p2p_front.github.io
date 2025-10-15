@@ -4,7 +4,6 @@
 const peer = new Peer({
   host: "osero-p2p-render.onrender.com",
   secure: true,
-  key: "peerjs",
   path: "/myapp",
 });
 
@@ -67,10 +66,10 @@ function setupConnection(conn) {
     statusDisplay.textContent = `Connected to ${connection.peer}.`;
     opponentIdInput.disabled = true;
     connectBtn.disabled = true;
-    if (myColor === 1) {
-      // ホスト側だけがゲーム開始をトリガー
-      startGame();
-    }
+    // if (myColor === 1) {
+    // ホスト側だけがゲーム開始をトリガー
+    startGame();
+    // }
   });
 
   connection.on("data", (data) => {
