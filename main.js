@@ -2,7 +2,7 @@
 // ここにRender等でデプロイしたシグナリングサーバーの情報を入力します
 // 例：
 const peer = new Peer({
-  host: "https://osero-p2p-render.onrender.com",
+  host: "osero-p2p-render.onrender.com",
   secure: true,
   key: "peerjs",
 });
